@@ -160,7 +160,9 @@ object Weeder2 {
     flatMapN(JvmOp.pickJavaName(tree))(jname => {
       mapN(traverseOpt(maybeImportMany)(tree => visitImportMany(tree, jname.fqn))) {
         // case: import one, use the java name
-        case None | Some(Nil) => List(UseOrImport.Import(jname, Name.Ident(jname.sp1, jname.fqn.last, jname.sp2), tree.loc))
+        case None | Some(Nil) =>
+          val ident = Name.Ident(jname.sp1, jname.fqn.lastOption.getOrElse(""), jname.sp2)
+          List(UseOrImport.Import(jname, ident, tree.loc))
         // case: import many
         case Some(imports) => imports
       }
@@ -806,6 +808,7 @@ object Weeder2 {
       val idents = pickAll(TreeKind.Ident, tree)
       flatMapN(traverse(idents)(tokenToIdent)) {
         idents =>
+          assert(idents.nonEmpty) // Require at least one ident
           val first = idents.head
           val ident = idents.last
           val nnameIdents = idents.dropRight(1)
@@ -1081,7 +1084,8 @@ object Weeder2 {
           if (isInfix) {
             val infixName = text(op).head.stripPrefix("`").stripSuffix("`")
             val infixNameParts = infixName.split('.').toList
-            val qname = Name.mkQName(infixNameParts.init, infixNameParts.last, op.loc.sp1, op.loc.sp2)
+            val lastName = infixNameParts.lastOption.getOrElse("")
+            val qname = Name.mkQName(infixNameParts.init, lastName, op.loc.sp1, op.loc.sp2)
             val opExpr = Expr.Ambiguous(qname, op.loc)
             return Validation.success(Expr.Infix(e1, opExpr, e2, tree.loc))
           }
@@ -2855,6 +2859,7 @@ object Weeder2 {
     val idents = pickAll(TreeKind.Ident, tree)
     mapN(traverse(idents)(tokenToIdent)) {
       idents =>
+        assert(idents.nonEmpty) // We require atleast one element to construct a qname
         val first = idents.head
         val ident = idents.last
         val nnameIdents = idents.dropRight(1)
