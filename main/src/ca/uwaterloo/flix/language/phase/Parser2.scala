@@ -1968,7 +1968,6 @@ object Parser2 {
     }
 
     private def catchRule()(implicit s: State): Mark.Closed = {
-      assert(at(TokenKind.KeywordCase))
       val mark = open()
       expect(TokenKind.KeywordCase)
       name(NAME_VARIABLE)
