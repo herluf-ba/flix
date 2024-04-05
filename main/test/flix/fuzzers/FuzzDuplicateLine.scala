@@ -166,7 +166,7 @@ class FuzzDuplicateLine extends AnyFunSuite with TestUtils {
 
     val flix = new Flix()
     flix.compile()
-    for (i <- 0 until numberOfLines) {
+    for (i <- 0 until numberOfLines - 1) {
       val (before, after) = lines.splitAt(i)
       val src = (before :: after.head :: after).mkString("\n")
       flix.addSourceCode(s"$name-duplicate-line-$i", src)

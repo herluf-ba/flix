@@ -167,11 +167,9 @@ class FuzzSwapLines extends AnyFunSuite with TestUtils {
     val flix = new Flix()
     flix.compile()
     for (i <- 0 until numberOfLines) {
-      val (before, after) = lines.splitAt(i)
       for (j <- 0 until numberOfLines) {
         if (i != j) {
-          val (afterBefore, afterAfter) = after.splitAt(j)
-          val src = (before :: afterAfter.head :: afterBefore.drop(1) :: afterBefore.head :: afterAfter.drop(1)).mkString("\n")
+          val src = lines.updated(i, lines(j)).updated(j, lines(i)).mkString("\n")
           flix.addSourceCode(s"$name-swap-lines-$i-and-$j", src)
           flix.compile() // We simply care that this does not crash.
         }
