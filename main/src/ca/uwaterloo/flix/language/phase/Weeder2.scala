@@ -799,7 +799,9 @@ object Weeder2 {
         case TreeKind.Expr.FixpointQuery => visitFixpointQueryExpr(tree)
         case TreeKind.Expr.Debug => visitDebugExpr(tree)
         case TreeKind.ErrorTree(err) => Validation.success(Expr.Error(err))
-        case _ => throw InternalCompilerException("Expected expression.", tree.loc)
+        case _ =>
+          println(tree.loc)
+          throw InternalCompilerException("Expected expression.", tree.loc)
       }
     }
 
