@@ -798,10 +798,15 @@ object Weeder2 {
         case TreeKind.Expr.FixpointSolveWithProject => visitFixpointSolveExpr(tree)
         case TreeKind.Expr.FixpointQuery => visitFixpointQueryExpr(tree)
         case TreeKind.Expr.Debug => visitDebugExpr(tree)
+        case TreeKind.Expr.Intrinsic =>
+          // Intrinsics must be applied to check that they have the right amount of arguments.
+          // This means that intrinsics are not "first-class" like other functions.
+          // Something like "let assign = $VECTOR_ASSIGN$" hits this case.
+          val error = ParseError("Intrinsics must be applied.", SyntacticContext.Expr.OtherExpr, tree.loc)
+          Validation.toSoftFailure(Expr.Error(error), error)
         case TreeKind.ErrorTree(err) => Validation.success(Expr.Error(err))
         case _ =>
-          println(tree.loc)
-          throw InternalCompilerException("Expected expression.", tree.loc)
+          throw InternalCompilerException(s"Expected expression.", tree.loc)
       }
     }
 
@@ -1804,6 +1809,7 @@ object Weeder2 {
     }
 
     private def visitIntrinsic(tree: Tree, args: List[Expr]): Validation[Expr, CompilationMessage] = {
+      expect(tree, TreeKind.Expr.Intrinsic)
       val intrinsic = text(tree).head.stripPrefix("$").stripSuffix("$")
       val loc = tree.loc
       (intrinsic, args) match {
