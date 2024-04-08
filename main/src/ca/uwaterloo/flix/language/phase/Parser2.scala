@@ -2199,8 +2199,12 @@ object Parser2 {
       while (eat(TokenKind.Comma) && !eof()) {
         expression()
       }
-      fixpointQuerySelect()
-      fixpointQueryFrom()
+      if (at(TokenKind.KeywordSelect)) {
+        fixpointQuerySelect()
+      }
+      if (at(TokenKind.KeywordFrom)) {
+        fixpointQueryFrom()
+      }
       if (at(TokenKind.KeywordWhere)) {
         fixpointQueryWhere()
       }
