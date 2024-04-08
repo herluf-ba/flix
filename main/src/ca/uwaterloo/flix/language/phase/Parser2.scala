@@ -126,7 +126,7 @@ object Parser2 {
     try {
       run(tokens, oldRoot, changeSet).toHardResult match {
         case Result.Ok(t) => Validation.success(t)
-        case Result.Err(e) =>
+        case Result.Err(_) =>
           // Note: We don't know if the Parser failed or the input was actually incorrect.
           // We assume the worst, i.e. that the Parser failed, and we return success.
           Validation.success(SyntaxTree.empty)
@@ -469,7 +469,7 @@ object Parser2 {
     }
 
     private def run()(implicit s: State): Int = {
-      def isAtEnd(): Boolean = at(rightDelim) || optionallyWith.exists { case (indicator, _) => at(indicator) }
+      def isAtEnd: Boolean = at(rightDelim) || optionallyWith.exists { case (indicator, _) => at(indicator) }
 
       if (!at(leftDelim)) {
         return 0
@@ -477,12 +477,12 @@ object Parser2 {
       expect(leftDelim)
       var continue = true
       var numItems = 0
-      while (continue && !isAtEnd() && !eof()) {
+      while (continue && !isAtEnd && !eof()) {
         comments()
         if (checkForItem()) {
           getItem()
           numItems += 1
-          if (!isAtEnd()) {
+          if (!isAtEnd) {
             if (optionalSeparator) eat(separator) else expect(separator)
           }
         } else {
@@ -550,7 +550,7 @@ object Parser2 {
     * Consumes a token if kind is in `kinds`. If `allowQualified` is passed also consume subsequent dot-separated tokens with kind in `kinds`.
     */
   private def name(kinds: List[TokenKind], allowQualified: Boolean = false)(implicit s: State): Mark.Closed = {
-    val mark = open()
+    val mark = open(consumeDocComments = false)
     expectAny(kinds)
     val first = close(mark, TreeKind.Ident)
     if (!allowQualified) {
@@ -1364,6 +1364,8 @@ object Parser2 {
               nth(lookAhead) match {
                 case TokenKind.ParenL => level += 1
                 case TokenKind.ParenR => level -= 1
+                // Hitting '}' on top-level is a clear indicator that something is wrong. Most likely the terminating ')' was forgotten.
+                case TokenKind.CurlyR if level == 1 => return advanceWithError(ParseError("Malformed tuple.", SyntacticContext.Unknown, currentSourceLocation()))
                 case TokenKind.Eof => return advanceWithError(ParseError("Malformed tuple.", SyntacticContext.Unknown, currentSourceLocation()))
                 case _ =>
               }
@@ -2252,19 +2254,19 @@ object Parser2 {
         case _ => false
       }
 
-      def getOpener(): Option[TokenKind] = nth(0) match {
+      def getOpener: Option[TokenKind] = nth(0) match {
         case TokenKind.LiteralStringInterpolationL => advance(); Some(TokenKind.LiteralStringInterpolationL)
         case TokenKind.LiteralDebugStringL => advance(); Some(TokenKind.LiteralDebugStringR)
         case _ => None
       }
 
-      var lastOpener = getOpener()
+      var lastOpener = getOpener
       while (lastOpener.isDefined && !eof()) {
         if (atTerminator(lastOpener)) {
           lastOpener = None // Terminate the loop
         } else {
           expression()
-          lastOpener = getOpener() // Try to get nested interpolation
+          lastOpener = getOpener // Try to get nested interpolation
         }
       }
       expectAny(List(TokenKind.LiteralStringInterpolationR, TokenKind.LiteralDebugStringR))

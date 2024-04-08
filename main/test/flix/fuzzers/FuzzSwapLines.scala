@@ -171,7 +171,13 @@ class FuzzSwapLines extends AnyFunSuite with TestUtils {
         if (i != j) {
           val src = lines.updated(i, lines(j)).updated(j, lines(i)).mkString("\n")
           flix.addSourceCode(s"$name-swap-lines-$i-and-$j", src)
-          flix.compile() // We simply care that this does not crash.
+          try {
+            flix.compile() // We simply care that this does not crash.
+          } catch {
+            case e: Throwable =>
+              println(s"$name-swap-lines-$i-and-$j")
+              throw e
+          }
         }
       }
     }

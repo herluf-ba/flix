@@ -170,7 +170,13 @@ class FuzzDuplicateLine extends AnyFunSuite with TestUtils {
       val (before, after) = lines.splitAt(i)
       val src = (before :: after.head :: after).mkString("\n")
       flix.addSourceCode(s"$name-duplicate-line-$i", src)
-      flix.compile() // We simply care that this does not crash.
+      try {
+        flix.compile() // We simply care that this does not crash.
+      } catch {
+        case e: Throwable =>
+          println(s"$name-drop-line-$i")
+          throw e
+      }
     }
   }
 
