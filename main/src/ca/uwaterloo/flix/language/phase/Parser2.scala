@@ -334,16 +334,18 @@ object Parser2 {
   /**
     * Look-ahead `lookahead` tokens.
     * Consumes one fuel and throws [[InternalCompilerException]] if the parser is out of fuel.
+    * Does not consume fuel if parser has hit end-of-file.
+    * This lets the parser return what ever errors were produced from a deep call-stack without running out of fuel.
     */
   private def nth(lookahead: Int)(implicit s: State): TokenKind = {
     if (s.fuel == 0) {
       throw InternalCompilerException(s"[${currentSourceLocation()}] Parser is stuck", currentSourceLocation())
     }
 
-    s.fuel -= 1
-    if (s.position + lookahead >= s.tokens.length) {
+    if (s.position + lookahead >= s.tokens.length - 1) {
       TokenKind.Eof
     } else {
+      s.fuel -= 1
       s.tokens(s.position + lookahead).kind
     }
   }
@@ -1358,14 +1360,21 @@ object Parser2 {
           // Detect lambda function declaration
           val isLambda = {
             var level = 1
+            var curlyLevel = 0
             var lookAhead = 0
             while (level > 0 && !eof()) {
               lookAhead += 1
               nth(lookAhead) match {
                 case TokenKind.ParenL => level += 1
                 case TokenKind.ParenR => level -= 1
-                // Hitting '}' on top-level is a clear indicator that something is wrong. Most likely the terminating ')' was forgotten.
-                case TokenKind.CurlyR if level == 1 => return advanceWithError(ParseError("Malformed tuple.", SyntacticContext.Unknown, currentSourceLocation()))
+                case TokenKind.CurlyL => curlyLevel += 1
+                case TokenKind.CurlyR if level == 1 =>
+                  if (curlyLevel == 0) {
+                    // Hitting '}' on top-level is a clear indicator that something is wrong. Most likely the terminating ')' was forgotten.
+                    return advanceWithError(ParseError("Malformed tuple.", SyntacticContext.Unknown, currentSourceLocation()))
+                  } else {
+                    curlyLevel -= 1
+                  }
                 case TokenKind.Eof => return advanceWithError(ParseError("Malformed tuple.", SyntacticContext.Unknown, currentSourceLocation()))
                 case _ =>
               }
