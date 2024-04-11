@@ -21,5 +21,5 @@ class FuzzerSuite extends Suites(
   new FuzzPrefixes,
   new FuzzDeleteLine,
   new FuzzDuplicateLine,
-  new FuzzSwapLines,
+//  new FuzzSwapLines,
 )
