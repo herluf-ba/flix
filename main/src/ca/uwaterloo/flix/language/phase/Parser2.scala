@@ -150,6 +150,9 @@ object Parser2 {
     root()
     // Build the syntax tree using events in state.
     val tree = buildTree()
+    if (src.name == "main/foo.flix") {
+      println(serializeSyntaxTree(tree))
+    }
     // Return with errors as soft failures to run subsequent phases for more validations.
     Validation.success(tree).withSoftFailures(s.errors)
   }
@@ -3434,6 +3437,19 @@ object Parser2 {
       putBody()
       close(mark, TreeKind.JvmOp.StaticPutField)
     }
+  }
+
+  /**
+    * Utility function that computes a textual representation of a [[SyntaxTree.Tree]].
+    * Meant for debugging use.
+    */
+  def serializeSyntaxTree(tree: SyntaxTree.Tree): String = {
+    s"${tree.kind}@${tree.loc.beginLine},${tree.loc.beginCol},${tree.loc.endLine},${tree.loc.endCol}${
+      tree.children.map {
+        case token@Token(_, _, _, _, _, _, _, _) => ""
+        case tree@SyntaxTree.Tree(_, _, _) => s"\n${serializeSyntaxTree(tree)}"
+      }.mkString("")
+    }"
   }
 
   /**
