@@ -35,6 +35,7 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.ForkJoinPool
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters.IteratorHasAsScala
 import scala.language.implicitConversions
 
 object Flix {
@@ -485,46 +486,84 @@ class Flix {
     // Reset the phase information.
     phaseTimers = ListBuffer.empty
 
-    // The default entry point
-    val entryPoint = flix.options.entryPoint
 
     implicit class MappableValidation[A, B](v: Validation[A, B]) {
       implicit def map[C](f: A => C): Validation[C, B] = Validation.mapN(v)(f)
     }
 
-    /** Remember to update [[AstPrinter]] about the list of phases. */
-    val result = for {
-      afterReader <- Reader.run(getInputs)
-      afterLexer <- Lexer.run(afterReader, cachedLexerTokens, changeSet)
-      afterParser <- Parser2.run(afterLexer, cachedParserCst, changeSet)
-      afterWeeder <- Weeder2.run(afterReader, entryPoint, afterParser, cachedWeederAst, changeSet)
-      afterDesugar = Desugar.run(afterWeeder, cachedDesugarAst, changeSet)
-      afterNamer <- Namer.run(afterDesugar)
-      afterResolver <- Resolver.run(afterNamer, cachedResolverAst, changeSet)
-      afterKinder <- Kinder.run(afterResolver, cachedKinderAst, changeSet)
-      afterDeriver <- Deriver.run(afterKinder)
-      afterTyper <- Typer.run(afterDeriver, cachedTyperAst, changeSet)
-      _ = EffectVerifier.run(afterTyper)
-      _ <- Regions.run(afterTyper)
-      afterEntryPoint <- EntryPoint.run(afterTyper)
-      _ <- Instances.run(afterEntryPoint, cachedTyperAst, changeSet)
-      afterPredDeps <- PredDeps.run(afterEntryPoint)
-      afterStratifier <- Stratifier.run(afterPredDeps)
-      afterPatMatch <- PatMatch.run(afterStratifier)
-      afterRedundancy <- Redundancy.run(afterPatMatch)
-      afterSafety <- Safety.run(afterRedundancy)
-    } yield {
-      // Update caches for incremental compilation.
-      if (options.incremental) {
-        this.cachedLexerTokens = afterLexer
-        this.cachedParserCst = afterParser
-        this.cachedWeederAst = afterWeeder
-        this.cachedDesugarAst = afterDesugar
-        this.cachedKinderAst = afterKinder
-        this.cachedResolverAst = afterResolver
-        this.cachedTyperAst = afterTyper
+    def getSyntaxTree(inputs: List[Input]): Validation[SyntaxTree.Root, CompilationMessage] = {
+      for {
+        afterReader <- Reader.run(inputs)
+        afterLexer <- Lexer.run(afterReader, cachedLexerTokens, changeSet)
+        afterParser <- Parser2.run(afterLexer, cachedParserCst, changeSet)
+      } yield {
+        afterParser
       }
-      afterSafety
+    }
+
+    val random = new scala.util.Random(5) // Set random with seed for determinism.
+    // Draws n unique random values in the range [from, to[
+    def uniqueRandom(n: Int, from: Int, to: Int): Set[Int] = {
+      var is = Set(random.between(from, to))
+      val targetSize = (to - from - 1).min(n)
+      while(is.size < targetSize) {
+        is = is ++ Set(random.between(from, to))
+      }
+      is
+    }
+
+    def toTextInput(input: Input): Input.Text = {
+      val name = input match {
+        case Input.Text(name, _, _) => name
+        case Input.TxtFile(path) => path.toString
+        case Input.PkgFile(path) => path.toString
+      }
+
+      val text = input match {
+        case Input.Text(_, text, _) => text
+        case Input.TxtFile(path) => Files.readString(path)
+        case Input.PkgFile(path) => Files.readString(path)
+      }
+
+      Input.Text(name, text, stable = true)
+    }
+
+    // Deletes n lines from input
+    def deleteLines(n: Int)(input: Input.Text): Input.Text = {
+      val lines = scala.io.Source.fromString(input.text).getLines().toList
+      val linesToDrop = uniqueRandom(n, 0, lines.length)
+      val newLines = for ((line, idx) <- lines.zipWithIndex if !linesToDrop.contains(idx)) yield line
+      val badText = newLines.mkString("\n")
+      Input.Text(input.name, badText, stable = true)
+    }
+
+    // Deletes n chars from input
+    def deleteChars(n: Int)(input: Input.Text): Input.Text = {
+      val charsToDrop = uniqueRandom(n, 0, input.text.length)
+      val newChars = for ((c, idx) <- input.text.toCharArray.zipWithIndex if !charsToDrop.contains(idx)) yield c
+      val badText = newChars.mkString("")
+      Input.Text(input.name, badText, stable = true)
+    }
+
+    for (i <- 1 to 10) {
+      val inputs = getInputs.map(toTextInput)
+      val ok = getSyntaxTree(inputs)
+      val bad = getSyntaxTree(inputs.map(deleteChars(i)))
+      val resilienceFactors = Validation.mapN(ok, bad) {
+        (ok, bad) =>
+          for(key <- ok.units.keys) yield key -> ResilienceTester.resilienceFactor( ok.units(key), bad.units(key) )
+      }
+
+      def median(s: List[Double])  = {
+        val (lower, upper) = s.sortWith(_<_).splitAt(s.size / 2)
+        if (s.size % 2 == 0) (lower.last + upper.head) / 2.0 else upper.head
+      }
+
+      Validation.mapN(resilienceFactors) {
+        factors =>
+          val med = median(factors.map(_._2).toList)
+          println(s"Drop $i chars median resilience factor: $med")
+      }
     }
 
     // Shutdown fork-join thread pool.
@@ -533,13 +572,8 @@ class Flix {
     // Reset the progress bar.
     progressBar.complete()
 
-    // Print summary?
-    if (options.xsummary) {
-      Summary.printSummary(result)
-    }
-
     // Return the result (which could contain soft failures).
-    result
+    Validation.success(TypedAst.empty)
   } catch {
     case ex: InternalCompilerException =>
       CrashHandler.handleCrash(ex)(this)
