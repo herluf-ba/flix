@@ -143,7 +143,7 @@ object Parser2 {
       parse(src, tokens)
     } catch {
       case e: InternalCompilerException =>
-        Validation.success(SyntaxTree.Tree(TreeKind.Root, Array.empty, SourceLocation.Unknown))
+        Validation.success(SyntaxTree.Tree(TreeKind.Root, Array.empty, tokens.head.mkSourceLocation(false)))
     }
   }
 
