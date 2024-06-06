@@ -47,15 +47,15 @@ object ResilienceTester {
     val regionOfBad = bad.drop(mismatchRange._1).dropRight(mismatchRange._2)
     // Compute length of longest common subsequence of mismatch region
     val lcsOfMismatch =  try {
-      if (regionOfBad.length <= 6000 && regionOfOk.length <= 6000) {
+      if (regionOfBad.length <= 8000 && regionOfOk.length <= 8000) {
         longestCommonSubsequence(regionOfOk, regionOfBad)
       } else {
-//        println(s"ERR\t${okTree.loc.source.name} mismatch too long! ${regionOfOk.length} ${regionOfBad.length}")
+        println(s"ERR\t${okTree.loc.source.name} mismatch too long! ${regionOfOk.length} ${regionOfBad.length}")
         0
       }
     } catch {
       case _: Throwable =>
-//        println(s"Could not compute lcs of ${okTree.loc.source.name}")
+        println(s"ERR\tCould not compute lcs of ${okTree.loc.source.name}")
         0
     }
     // Add lenghts of matching prefix and suffix for final lcs.

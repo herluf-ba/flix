@@ -1143,7 +1143,7 @@ object Lexer {
     }
 
     val len = tokens.length / n
-    tokens.slice(0, len)
+    tokens.dropRight(len.min(tokens.length - 1))
   }
 
   private def fuzzPostfix(tokens: Array[Token], n: Int)(implicit flix: Flix): Array[Token] = {
