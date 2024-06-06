@@ -128,7 +128,7 @@ object Parser2 {
 
       // Parse each stale source in parallel and join them into a WeededAst.Root
       val refreshed = stale.map {
-        case (src, tokens) => mapN(parse(src, tokens))(trees => src -> trees)
+        case (src, tokens) => mapN(tryParse(src, tokens))(trees => src -> trees)
       }
 
       // Join refreshed syntax trees with the already fresh ones.
@@ -136,6 +136,15 @@ object Parser2 {
         refreshed => SyntaxTree.Root(refreshed.toMap ++ fresh)
       }
     }(DebugValidation())
+  }
+
+  private def tryParse(src: Ast.Source, tokens: Array[Token]): Validation[SyntaxTree.Tree, CompilationMessage] = {
+    try {
+      parse(src, tokens)
+    } catch {
+      case e: InternalCompilerException =>
+        Validation.success(SyntaxTree.Tree(TreeKind.Root, Array.empty, SourceLocation.Unknown))
+    }
   }
 
   private def parse(src: Ast.Source, tokens: Array[Token]): Validation[SyntaxTree.Tree, CompilationMessage] = {
