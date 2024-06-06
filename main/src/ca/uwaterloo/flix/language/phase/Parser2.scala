@@ -139,16 +139,12 @@ object Parser2 {
   }
 
   private def parse(src: Ast.Source, tokens: Array[Token]): Validation[SyntaxTree.Tree, CompilationMessage] = {
-    implicit val s: State = new State(tokens, src)
-    print(s"${src.name}")
-    if (src.name == "main/foo.flix") {
-      println(src.data.mkString(""))
-    }
+    val tokensNoComment = tokens.filter(!_.kind.isComment)
+    implicit val s: State = new State(tokensNoComment, src)
     // Call the top-most grammar rule to gather all events into state.
     root()
     // Build the syntax tree using events in state.
     val tree = buildTree()
-    print(s"\tdone\n")
     // Return with errors as soft failures to run subsequent phases for more validations.
     Validation.success(tree).withSoftFailures(s.errors)
   }
@@ -847,7 +843,7 @@ object Parser2 {
             val loc = currentSourceLocation()
             val error = UnexpectedToken(expected = NamedTokenSet.Declaration, actual = Some(at), SyntacticContext.Decl.OtherDecl, loc = loc)
             // Skip ahead until we find another declaration or a '}' signifying the end of the module.
-            while (!nth(0).isRecoverMod) {
+            while (!nth(0).isRecoverMod && !eof()) {
               advance()
             }
             closeWithError(markErr, error)
