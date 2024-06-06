@@ -492,13 +492,23 @@ class Flix {
     }
 
     def getSyntaxTree(inputs: List[Input]): Validation[SyntaxTree.Root, CompilationMessage] = {
-      for {
+     val res = for {
         afterReader <- Reader.run(inputs)
-        afterLexer <- Lexer.run(afterReader, cachedLexerTokens, changeSet)
-        afterParser <- Parser2.run(afterLexer, cachedParserCst, changeSet)
+        afterLexer <- {
+          val run = Lexer.run(afterReader, cachedLexerTokens, changeSet)
+          println("Lexer done")
+          run
+        }
+        afterParser <- {
+          val run = Parser2.run(afterLexer, cachedParserCst, changeSet)
+          println("Parser done")
+          run
+        }
       } yield {
         afterParser
       }
+      println(res)
+      res
     }
 
     val random = new scala.util.Random(5) // Set random with seed for determinism.
@@ -534,6 +544,25 @@ class Flix {
       val linesToDrop = uniqueRandom(n, 0, lines.length)
       val newLines = for ((line, idx) <- lines.zipWithIndex if !linesToDrop.contains(idx)) yield line
       val badText = newLines.mkString("\n")
+//      println(s"drop lines ${linesToDrop.map(_ + 1).mkString(", ")} from ${input.name}")
+      Input.Text(input.name, badText, stable = true)
+    }
+
+    // creates a prefix of length/n chars from input
+    def prefix(n: Int)(input: Input.Text): Input.Text = {
+      val prefixLen = input.text.length / n
+      val badText = input.text.substring(0, prefixLen)
+//      println(s"prefix ${prefixLen} from ${input.text.length} of ${input.name}")
+      Input.Text(input.name, badText, stable = true)
+    }
+
+    // Stutter n lines from input
+    def stutterLines(n: Int)(input: Input.Text): Input.Text = {
+      val lines = scala.io.Source.fromString(input.text).getLines().toList
+      val linesToStutter = uniqueRandom(n, 0, lines.length)
+      val newLines = for ((line, idx) <- lines.zipWithIndex) yield if (linesToStutter.contains(idx)) line + "\n" + line else line
+      val badText = newLines.mkString("\n")
+      //      println(s"drop lines ${linesToDrop.map(_ + 1).mkString(", ")} from ${input.name}")
       Input.Text(input.name, badText, stable = true)
     }
 
@@ -545,26 +574,36 @@ class Flix {
       Input.Text(input.name, badText, stable = true)
     }
 
-    for (i <- 1 to 10) {
+    val maxN = 10
+//    for (i <- 1 to maxN) {
       val inputs = getInputs.map(toTextInput)
       val ok = getSyntaxTree(inputs)
-      val bad = getSyntaxTree(inputs.map(deleteChars(i)))
-      val resilienceFactors = Validation.mapN(ok, bad) {
+//      val badDeleteLines = getSyntaxTree(inputs.map(deleteLines(i)))
+//      Validation.mapN(ok, badDeleteLines) {
+//        (ok, bad) => for (src <- ok.units.keys)  {
+//          val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
+//          println(s"delete-lines,$i,${src.name},$score")
+//        }
+//      }
+//
+//      val badStutterLines = getSyntaxTree(inputs.map(stutterLines(i)))
+//      Validation.mapN(ok, badStutterLines) {
+//          (ok, bad) => for (src <- ok.units.keys)  {
+//            val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
+//            println(s"stutter-lines,$i,${src.name},$score")
+//          }
+//      }
+      val badPrefixes = getSyntaxTree(inputs.map(prefix(10)))
+      println("Computing factors")
+      val res = Validation.mapN(ok, badPrefixes) {
         (ok, bad) =>
-          for(key <- ok.units.keys) yield key -> ResilienceTester.resilienceFactor( ok.units(key), bad.units(key) )
+          for (src <- ok.units.keys)  {
+            val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
+            println(s"prefix,10,${src.name},$score")
+          }
+          TypedAst.empty
       }
-
-      def median(s: List[Double])  = {
-        val (lower, upper) = s.sortWith(_<_).splitAt(s.size / 2)
-        if (s.size % 2 == 0) (lower.last + upper.head) / 2.0 else upper.head
-      }
-
-      Validation.mapN(resilienceFactors) {
-        factors =>
-          val med = median(factors.map(_._2).toList)
-          println(s"Drop $i chars median resilience factor: $med")
-      }
-    }
+//    }
 
     // Shutdown fork-join thread pool.
     shutdownForkJoinPool()
@@ -573,7 +612,7 @@ class Flix {
     progressBar.complete()
 
     // Return the result (which could contain soft failures).
-    Validation.success(TypedAst.empty)
+    res
   } catch {
     case ex: InternalCompilerException =>
       CrashHandler.handleCrash(ex)(this)

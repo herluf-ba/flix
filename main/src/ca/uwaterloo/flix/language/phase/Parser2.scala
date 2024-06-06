@@ -127,7 +127,7 @@ object Parser2 {
       val (stale, fresh) = changeSet.partition(tokens, oldRoot.units)
 
       // Parse each stale source in parallel and join them into a WeededAst.Root
-      val refreshed = ParOps.parMap(stale) {
+      val refreshed = stale.map {
         case (src, tokens) => mapN(parse(src, tokens))(trees => src -> trees)
       }
 
@@ -140,10 +140,15 @@ object Parser2 {
 
   private def parse(src: Ast.Source, tokens: Array[Token]): Validation[SyntaxTree.Tree, CompilationMessage] = {
     implicit val s: State = new State(tokens, src)
+    print(s"${src.name}")
+    if (src.name == "main/foo.flix") {
+      println(src.data.mkString(""))
+    }
     // Call the top-most grammar rule to gather all events into state.
     root()
     // Build the syntax tree using events in state.
     val tree = buildTree()
+    print(s"\tdone\n")
     // Return with errors as soft failures to run subsequent phases for more validations.
     Validation.success(tree).withSoftFailures(s.errors)
   }
