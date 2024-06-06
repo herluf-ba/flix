@@ -142,14 +142,13 @@ object Parser2 {
     try {
       parse(src, tokens)
     } catch {
-      case e: InternalCompilerException =>
+      case _: Throwable =>
         Validation.success(SyntaxTree.Tree(TreeKind.Root, Array.empty, tokens.head.mkSourceLocation(false)))
     }
   }
 
   private def parse(src: Ast.Source, tokens: Array[Token]): Validation[SyntaxTree.Tree, CompilationMessage] = {
-    val tokensNoComment = tokens.filter(!_.kind.isComment)
-    implicit val s: State = new State(tokensNoComment, src)
+    implicit val s: State = new State(tokens, src)
     // Call the top-most grammar rule to gather all events into state.
     root()
     // Build the syntax tree using events in state.

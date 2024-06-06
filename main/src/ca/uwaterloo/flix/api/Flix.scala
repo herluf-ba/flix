@@ -491,123 +491,48 @@ class Flix {
       implicit def map[C](f: A => C): Validation[C, B] = Validation.mapN(v)(f)
     }
 
-    def getSyntaxTree(inputs: List[Input]): Validation[SyntaxTree.Root, CompilationMessage] = {
+    def getSyntaxTree(inputs: List[Input], n: Int = 1, lexerFuzz: String = "none"): Validation[SyntaxTree.Root, CompilationMessage] = {
      for {
         afterReader <- Reader.run(inputs)
-        afterLexer <- Lexer.run(afterReader, cachedLexerTokens, changeSet)
+        afterLexer <- Lexer.run(afterReader, cachedLexerTokens, changeSet, n, fuzzMode = lexerFuzz)
         afterParser <- Parser2.run(afterLexer, cachedParserCst, changeSet)
       } yield {
         afterParser
       }
     }
 
-    val random = new scala.util.Random(5) // Set random with seed for determinism.
-    // Draws n unique random values in the range [from, to[
-    def uniqueRandom(n: Int, from: Int, to: Int): Set[Int] = {
-      var is = Set(random.between(from, to))
-      val targetSize = (to - from - 1).min(n)
-      while(is.size < targetSize) {
-        is = is ++ Set(random.between(from, to))
-      }
-      is
-    }
-
-    def toTextInput(input: Input): Input.Text = {
-      val name = input match {
-        case Input.Text(name, _, _) => name
-        case Input.TxtFile(path) => path.toString
-        case Input.PkgFile(path) => path.toString
-      }
-
-      val text = input match {
-        case Input.Text(_, text, _) => text
-        case Input.TxtFile(path) => Files.readString(path)
-        case Input.PkgFile(path) => Files.readString(path)
-      }
-      // Filter whitespace lines
-      val noBlankLines = scala.io.Source.fromString(text).getLines().toList.filterNot(_.isBlank).mkString("\n")
-
-      Input.Text(name, noBlankLines, stable = true)
-    }
-
-    // Deletes n lines from input
-    def deleteLines(n: Int)(input: Input.Text): Input.Text = {
-      val lines = scala.io.Source.fromString(input.text).getLines().toList
-      val linesToDrop = uniqueRandom(n, 0, lines.length)
-      val newLines = for ((line, idx) <- lines.zipWithIndex if !linesToDrop.contains(idx)) yield line
-      val badText = newLines.mkString("\n")
-//      println(s"drop lines ${linesToDrop.map(_ + 1).mkString(", ")} from ${input.name}")
-      Input.Text(input.name, badText, stable = true)
-    }
-
-    // creates a prefix of length/n chars from input
-    def prefix(n: Int)(input: Input.Text): Input.Text = {
-      val prefixLen = input.text.length / n
-      val badText = input.text.substring(0, prefixLen)
-//      println(s"prefix ${prefixLen} from ${input.text.length} of ${input.name}")
-      Input.Text(input.name, badText, stable = true)
-    }
-
-    // trims n lines of the end of input
-    def trimLinesEnd(n: Int)(input: Input.Text): Input.Text = {
-      val lines = scala.io.Source.fromString(input.text).getLines().toList
-      val maxLine = lines.length - n
-      val newLines = for ((line, idx) <- lines.zipWithIndex if idx < maxLine) yield line
-      //      println(s"prefix ${prefixLen} from ${input.text.length} of ${input.name}")
-      val badText = newLines.mkString("\n")
-      Input.Text(input.name, badText, stable = true)
-    }
-
-    // Stutter n lines from input
-    def stutterLines(n: Int)(input: Input.Text): Input.Text = {
-      val lines = scala.io.Source.fromString(input.text).getLines().toList
-      val linesToStutter = uniqueRandom(n, 0, lines.length)
-      val newLines = for ((line, idx) <- lines.zipWithIndex) yield if (linesToStutter.contains(idx)) line + "\n" + line else line
-      val badText = newLines.mkString("\n")
-      //      println(s"drop lines ${linesToDrop.map(_ + 1).mkString(", ")} from ${input.name}")
-      Input.Text(input.name, badText, stable = true)
-    }
-
-    // Deletes n chars from input
-    def deleteChars(n: Int)(input: Input.Text): Input.Text = {
-      val charsToDrop = uniqueRandom(n, 0, input.text.length)
-      val newChars = for ((c, idx) <- input.text.toCharArray.zipWithIndex if !charsToDrop.contains(idx)) yield c
-      val badText = newChars.mkString("")
-      Input.Text(input.name, badText, stable = true)
-    }
-
     val maxN = 10
     for (i <- 1 to maxN) {
-      val inputs = getInputs.map(toTextInput)
+      val inputs = getInputs
       val ok = getSyntaxTree(inputs)
-      val badDeleteLines = getSyntaxTree(inputs.map(deleteLines(i)))
-      Validation.mapN(ok, badDeleteLines) {
+      val badSwapTokens = getSyntaxTree(inputs, i, lexerFuzz = "swap")
+      Validation.mapN(ok, badSwapTokens) {
         (ok, bad) => for (src <- ok.units.keys)  {
           val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
-          println(s"delete-lines,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
+          println(s"swap-tokens,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
         }
       }
-      val badStutterLines = getSyntaxTree(inputs.map(stutterLines(i)))
-      Validation.mapN(ok, badStutterLines) {
+      val badDropTokens = getSyntaxTree(inputs, i, lexerFuzz = "drop")
+      Validation.mapN(ok, badDropTokens) {
           (ok, bad) => for (src <- ok.units.keys)  {
             val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
-            println(s"stutter-lines,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
+            println(s"drop-tokens,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
           }
       }
-      val badTrimLines = getSyntaxTree(inputs.map(trimLinesEnd(i)))
-      Validation.mapN(ok, badTrimLines) {
-          (ok, bad) => for (src <- ok.units.keys)  {
-            val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
-            println(s"trim-lines,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
-          }
-      }
-      val reverseI = maxN - i + 1
-      val badPrefixes = getSyntaxTree(inputs.map(prefix(reverseI)))
+      val badPrefixes = getSyntaxTree(inputs, i, lexerFuzz = "prefix")
       Validation.mapN(ok, badPrefixes) {
         (ok, bad) =>
           for (src <- ok.units.keys)  {
             val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
-            println(s"prefix,$reverseI,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
+            println(s"prefix,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
+          }
+      }
+      val badPostfixes = getSyntaxTree(inputs, i, lexerFuzz = "postfix")
+      Validation.mapN(ok, badPostfixes) {
+        (ok, bad) =>
+          for (src <- ok.units.keys)  {
+            val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
+            println(s"postfix,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
           }
       }
     }
