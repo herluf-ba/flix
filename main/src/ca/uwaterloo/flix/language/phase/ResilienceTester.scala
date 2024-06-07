@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package ca.uwaterloo.flix.language.phase
+
 import ca.uwaterloo.flix.language.ast._
 
 object ResilienceTester {
@@ -23,20 +24,19 @@ object ResilienceTester {
     // Do a preorder traversal of both syntax trees
     val ok = preorderTraverse(okTree)
     val bad = preorderTraverse(badTree)
-//    println(Parser2.syntaxTreeToDebugString(okTree))
 
     // Count the lengths of identical prefix and suffix.
     val mismatchRange = {
       var i = 0
       val max = ok.length.min(bad.length)
-      while( i < max && ok(i) == bad(i)) {
+      while (i < max && ok(i) == bad(i)) {
         i = i + 1
       }
       var j = 0
       val okRev = ok.reverse
       val badRev = bad.reverse
       val jMax = (max - i)
-      while(j < jMax & okRev(j) == badRev(j)) {
+      while (j < jMax & okRev(j) == badRev(j)) {
         j = j + 1
       }
       (i, j)
@@ -46,31 +46,35 @@ object ResilienceTester {
     val regionOfOk = ok.drop(mismatchRange._1).dropRight(mismatchRange._2)
     val regionOfBad = bad.drop(mismatchRange._1).dropRight(mismatchRange._2)
     // Compute length of longest common subsequence of mismatch region
-    val lcsOfMismatch =  try {
+    val lcsOfMismatch = try {
       if (regionOfBad.length <= 8000 && regionOfOk.length <= 8000) {
         longestCommonSubsequence(regionOfOk, regionOfBad)
       } else {
-//        println(s"ERR\t${okTree.loc.source.name} mismatch too long! ${regionOfOk.length} ${regionOfBad.length}")
-        -1000000000
+        //        println(s"ERR\t${okTree.loc.source.name} mismatch too long! ${regionOfOk.length} ${regionOfBad.length}")
+        -1
       }
     } catch {
       case _: Throwable =>
-//        println(s"ERR\tCould not compute lcs of ${okTree.loc.source.name}")
-        -1000000000
+        //        println(s"ERR\tCould not compute lcs of ${okTree.loc.source.name}")
+        -1
     }
+    if (lcsOfMismatch < 0) {
+      return -1d
+    }
+
     // Add lenghts of matching prefix and suffix for final lcs.
     val preAndSufficMatchLen = mismatchRange._1 + mismatchRange._2
     val lcs = preAndSufficMatchLen + lcsOfMismatch
 
-//    println(regionOfOk.mkString("\n"))
-//    println("")
-//    println(regionOfBad.mkString("\n"))
-//    println("")
-//    println(s"ok  traverse length: ${ok.length} ${ok.length - preAndSufficMatchLen}")
-//    println(s"bad traverse length: ${bad.length} ${bad.length - preAndSufficMatchLen}")
-//    println(s"mismatchRange: ${mismatchRange}")
-//    println(s"lcs of mismatch: ${lcsOfMismatch}")
-//    println(s"lcs: ${lcs}")
+    //    println(regionOfOk.mkString("\n"))
+    //    println("")
+    //    println(regionOfBad.mkString("\n"))
+    //    println("")
+    //    println(s"ok  traverse length: ${ok.length} ${ok.length - preAndSufficMatchLen}")
+    //    println(s"bad traverse length: ${bad.length} ${bad.length - preAndSufficMatchLen}")
+    //    println(s"mismatchRange: ${mismatchRange}")
+    //    println(s"lcs of mismatch: ${lcsOfMismatch}")
+    //    println(s"lcs: ${lcs}")
 
     // Divide lcs with length of preorder traversal of ok tree for a resilience factor.
     lcs.toDouble / ok.length.toDouble
@@ -109,7 +113,7 @@ object ResilienceTester {
   }
 
   /** @define immuMapNote As this memo uses a single var, it's
-    * thread-safe. */
+    *                     thread-safe. */
   trait MemoFunctions {
     def memo[@specialized(Int) K, @specialized(Int, Long, Double) V](f: (K => V) => K => V): Memo[K, V] = new Memo[K, V] {
       def apply(z: K => V) = f(z)
