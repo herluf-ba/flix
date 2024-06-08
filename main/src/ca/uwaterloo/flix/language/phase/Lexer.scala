@@ -1140,15 +1140,14 @@ object Lexer {
     // Compute 1% step
     val step = tokens.length / 100
     val amountToDrop = step * n
-    val f = amountToDrop.min(tokens.length - 1)
-    tokens.dropRight(amountToDrop.min(tokens.length - 1))
+    val eofTok = tokens.last
+    tokens.dropRight(amountToDrop.min(tokens.length)) :+ eofTok
   }
 
   private def fuzzPostfix(tokens: Array[Token], n: Int)(implicit flix: Flix): Array[Token] = {
     // Compute 1% step
     val step = tokens.length / 100
     val amountToDrop = step * n
-    val f = amountToDrop.min(tokens.length - 1)
     tokens.drop(amountToDrop.min(tokens.length - 1))
   }
 }

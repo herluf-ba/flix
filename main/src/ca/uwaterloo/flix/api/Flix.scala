@@ -501,24 +501,24 @@ class Flix {
       }
     }
 
-    val maxN = 10
+    val maxN = 35
     for (i <- 1 to maxN) {
       val inputs = getInputs
       val ok = getSyntaxTree(inputs)
-      val badSwapTokens = getSyntaxTree(inputs, i, lexerFuzz = "swap")
-      Validation.mapN(ok, badSwapTokens) {
-        (ok, bad) => for (src <- ok.units.keys)  {
-          val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
-          println(s"swap-tokens,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
-        }
-      }
-      val badDropTokens = getSyntaxTree(inputs, i, lexerFuzz = "drop")
-      Validation.mapN(ok, badDropTokens) {
-          (ok, bad) => for (src <- ok.units.keys)  {
-            val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
-            println(s"drop-tokens,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
-          }
-      }
+//      val badSwapTokens = getSyntaxTree(inputs, i, lexerFuzz = "swap")
+//      Validation.mapN(ok, badSwapTokens) {
+//        (ok, bad) => for (src <- ok.units.keys)  {
+//          val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
+//          println(s"swap-tokens,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
+//        }
+//      }
+//      val badDropTokens = getSyntaxTree(inputs, i, lexerFuzz = "drop")
+//      Validation.mapN(ok, badDropTokens) {
+//          (ok, bad) => for (src <- ok.units.keys)  {
+//            val score = ResilienceTester.resilienceFactor( ok.units(src), bad.units(src) )
+//            println(s"drop-tokens,$i,${src.name},${"%.8f".formatLocal(java.util.Locale.US, score)}")
+//          }
+//      }
       val badPrefixes = getSyntaxTree(inputs, i, lexerFuzz = "prefix")
       Validation.mapN(ok, badPrefixes) {
         (ok, bad) =>
